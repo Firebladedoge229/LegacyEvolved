@@ -71,6 +71,15 @@ try {
     try {
         $basePath = (Resolve-Path $ReleaseDir).Path
 
+        # Add empty directories so they exist when extracted
+        Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
+            $dirFullPath = $_.FullName
+            $relativePath = $dirFullPath.Substring($basePath.Length).TrimStart('\','/')
+            $entryName = ($topLevelFolder + "/" + ($relativePath -replace '\\','/') + "/")
+            # Creating an entry with a trailing slash makes an empty directory in the zip
+            $zip.CreateEntry($entryName) | Out-Null
+        }
+
         Get-ChildItem -Path $basePath -Recurse -File | ForEach-Object {
             $fullPath = $_.FullName
 
