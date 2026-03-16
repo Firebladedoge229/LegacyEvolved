@@ -74,6 +74,8 @@ namespace ServerRuntime
 		bool naturalRegeneration;
 		bool doDaylightCycle;
 		bool hardcore;
+		/** `hardcore-ban-ip` — whether hardcore death bans include IP bans */
+		bool hardcoreBanIp;
 
 		/** other MinecraftServer runtime settings */
 		int maxBuildHeight;

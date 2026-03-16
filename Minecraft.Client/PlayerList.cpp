@@ -42,6 +42,7 @@
 #include "..\Minecraft.Server\Common\StringUtils.h"
 #include "..\Minecraft.Server\ServerLogger.h"
 #include "..\Minecraft.Server\ServerLogManager.h"
+#include "..\Minecraft.Server\ServerProperties.h"
 extern bool g_Win64DedicatedServer;
 #endif
 
@@ -1758,23 +1759,31 @@ void PlayerList::banPlayerForHardcoreDeath(ServerPlayer *player)
 		}
 
 		// Ban the player's IP address (uses same access path as CliCommandBanIp)
-		if (player->connection != nullptr && player->connection->connection != nullptr && player->connection->connection->getSocket() != nullptr)
+		auto serverConfig = ServerRuntime::LoadServerPropertiesConfig();
+		if (serverConfig.hardcoreBanIp)
 		{
-			const unsigned char smallId = player->connection->connection->getSocket()->getSmallId();
-			std::string ip;
-			if (smallId != 0 && ServerRuntime::ServerLogManager::TryGetConnectionRemoteIp(smallId, &ip))
+			if (player->connection != nullptr && player->connection->connection != nullptr && player->connection->connection->getSocket() != nullptr)
 			{
-				ServerRuntime::Access::AddIpBan(ip, metadata);
-				ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID + IP %s) for dying in hardcore mode.", playerName.c_str(), ip.c_str());
+				const unsigned char smallId = player->connection->connection->getSocket()->getSmallId();
+				std::string ip;
+				if (smallId != 0 && ServerRuntime::ServerLogManager::TryGetConnectionRemoteIp(smallId, &ip))
+				{
+					ServerRuntime::Access::AddIpBan(ip, metadata);
+					ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID + IP %s) for dying in hardcore mode.", playerName.c_str(), ip.c_str());
+				}
+				else
+				{
+					ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID only, IP not available) for dying in hardcore mode.", playerName.c_str());
+				}
 			}
 			else
 			{
-				ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID only, IP not available) for dying in hardcore mode.", playerName.c_str());
+				ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID only, no connection) for dying in hardcore mode.", playerName.c_str());
 			}
 		}
 		else
 		{
-			ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID only, no connection) for dying in hardcore mode.", playerName.c_str());
+			ServerRuntime::LogInfof("Hardcore", "Player %s banned (XUID only, IP ban disabled) for dying in hardcore mode.", playerName.c_str());
 		}
 
 		// Send ban reason then defer the actual close to the next tick, because this

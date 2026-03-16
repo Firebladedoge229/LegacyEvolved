@@ -55,6 +55,7 @@ static const ServerPropertyDefault kServerPropertyDefaults[] =
 	{ "gamertags", "true" },
 	{ "generate-structures", "true" },
 	{ "hardcore", "false" },
+	{ "hardcore-ban-ip", "true" },
 	{ "host-can-be-invisible", "true" },
 	{ "host-can-change-hunger", "true" },
 	{ "host-can-fly", "true" },
@@ -863,6 +864,7 @@ ServerPropertiesConfig LoadServerPropertiesConfig()
 	config.naturalRegeneration = ReadNormalizedBoolProperty(&merged, "natural-regeneration", true, &shouldWrite);
 	config.doDaylightCycle = ReadNormalizedBoolProperty(&merged, "do-daylight-cycle", true, &shouldWrite);
 	config.hardcore = ReadNormalizedBoolProperty(&merged, "hardcore", false, &shouldWrite);
+	config.hardcoreBanIp = ReadNormalizedBoolProperty(&merged, "hardcore-ban-ip", true, &shouldWrite);
 
 	config.maxBuildHeight = ReadNormalizedIntProperty(&merged, "max-build-height", 256, 64, 256, &shouldWrite);
 	config.motd = ReadNormalizedStringProperty(&merged, "motd", "A Minecraft Server", 255, &shouldWrite);
