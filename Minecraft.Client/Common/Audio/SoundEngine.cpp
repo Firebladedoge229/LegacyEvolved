@@ -8,6 +8,8 @@
 #include "..\..\Minecraft.World\mth.h"
 #include "..\..\TexturePackRepository.h"
 #include "..\..\DLCTexturePack.h"
+#include "..\..\MultiPlayerGameMode.h"
+#include "..\..\Minecraft.World\LevelSettings.h"
 #include "Common\DLC\DLCAudioFile.h"
 
 #ifdef __PSVITA__
@@ -114,6 +116,9 @@ const char *SoundEngine::m_szStreamFileA[eStream_Max]=
 	"hal4",
 	"nuance1",
 	"nuance2",
+	"piano1",
+	"piano2",
+	"piano3",
 
 #ifndef _XBOX
 	"creative1",
@@ -127,10 +132,6 @@ const char *SoundEngine::m_szStreamFileA[eStream_Max]=
 	"menu3",
 	"menu4",
 #endif
-
-	"piano1",
-	"piano2",
-	"piano3",
 
 	// Nether
 	"nether1",
@@ -408,6 +409,13 @@ SoundEngine::SoundEngine()
 		eStream_Nether1,eStream_Nether4,
 		eStream_end_dragon,eStream_end_end,
 		eStream_CD_1);
+
+#ifndef _XBOX
+	m_iStream_Creative_Min = eStream_Overworld_Creative1;
+	m_iStream_Creative_Max = eStream_Overworld_Creative6;
+	m_iStream_Menu_Min = eStream_Overworld_Menu1;
+	m_iStream_Menu_Max = eStream_Overworld_Menu4;
+#endif
 
 	m_musicID=getMusicID(LevelData::DIMENSION_OVERWORLD);
 
@@ -806,6 +814,46 @@ int SoundEngine::GetRandomishTrack(int iStart,int iEnd)
 	app.DebugPrintf("Select track %d\n",iVal);
 	return iVal;
 }
+
+/////////////////////////////////////////////
+//
+//	getOverworldMusicID - selects overworld music based on game mode
+//
+/////////////////////////////////////////////
+int SoundEngine::getOverworldMusicID(Minecraft *pMinecraft)
+{
+#ifndef _XBOX
+	// Check if any local player is in creative mode
+	bool isCreative = false;
+	for(unsigned int i = 0; i < MAX_LOCAL_PLAYERS; i++)
+	{
+		if(pMinecraft->localplayers[i] != nullptr && pMinecraft->localgameModes[i] != nullptr)
+		{
+			GameType *mode = pMinecraft->localgameModes[i]->getLocalPlayerMode();
+			if(mode != nullptr && mode->isCreative())
+			{
+				isCreative = true;
+				break;
+			}
+		}
+	}
+
+	if(isCreative)
+	{
+		// Creative: survival tracks + creative tracks
+		int survivalCount = m_iStream_Overworld_Max - m_iStream_Overworld_Min + 1;
+		int creativeCount = m_iStream_Creative_Max - m_iStream_Creative_Min + 1;
+		int pick = random->nextInt(survivalCount + creativeCount);
+		if(pick < survivalCount)
+			return GetRandomishTrack(m_iStream_Overworld_Min, m_iStream_Overworld_Max);
+		else
+			return GetRandomishTrack(m_iStream_Creative_Min, m_iStream_Creative_Max);
+	}
+#endif
+	// Survival/Adventure: survival tracks only
+	return GetRandomishTrack(m_iStream_Overworld_Min, m_iStream_Overworld_Max);
+}
+
 /////////////////////////////////////////////
 //
 //	getMusicID
@@ -813,29 +861,33 @@ int SoundEngine::GetRandomishTrack(int iStart,int iEnd)
 /////////////////////////////////////////////
 int SoundEngine::getMusicID(int iDomain)
 {
-	int iRandomVal=0;
+	int result=-1;
 	Minecraft *pMinecraft=Minecraft::GetInstance();
 
 	// Before the game has started?
 	if(pMinecraft==nullptr)
 	{
-		// any track from the overworld
-		return GetRandomishTrack(m_iStream_Overworld_Min,m_iStream_Overworld_Max);
+#ifndef _XBOX
+		// Title screen: play menu music
+		result = GetRandomishTrack(m_iStream_Menu_Min,m_iStream_Menu_Max);
+#else
+		result = GetRandomishTrack(m_iStream_Overworld_Min,m_iStream_Overworld_Max);
+#endif
 	}
-
-	if(pMinecraft->skins->isUsingDefaultSkin())
+	else if(pMinecraft->skins->isUsingDefaultSkin())
 	{
 		switch(iDomain)
 		{
 		case LevelData::DIMENSION_END:
 			// the end isn't random - it has different music depending on whether the dragon is alive or not, but we've not added the dead dragon music yet
-			return m_iStream_End_Min;
+			result = m_iStream_End_Min;
+			break;
 		case LevelData::DIMENSION_NETHER:
-			return GetRandomishTrack(m_iStream_Nether_Min,m_iStream_Nether_Max);
-			//return m_iStream_Nether_Min + random->nextInt(m_iStream_Nether_Max-m_iStream_Nether_Min);
+			result = GetRandomishTrack(m_iStream_Nether_Min,m_iStream_Nether_Max);
+			break;
 		default: //overworld
-			//return m_iStream_Overworld_Min + random->nextInt(m_iStream_Overworld_Max-m_iStream_Overworld_Min);
-			return GetRandomishTrack(m_iStream_Overworld_Min,m_iStream_Overworld_Max);
+			result = getOverworldMusicID(pMinecraft);
+			break;
 		}
 	}
 	else
@@ -844,15 +896,22 @@ int SoundEngine::getMusicID(int iDomain)
 		switch(iDomain)
 		{
 		case LevelData::DIMENSION_END:
-			return GetRandomishTrack(m_iStream_End_Min,m_iStream_End_Max);
+			result = GetRandomishTrack(m_iStream_End_Min,m_iStream_End_Max);
+			break;
 		case LevelData::DIMENSION_NETHER:
-			//return m_iStream_Nether_Min + random->nextInt(m_iStream_Nether_Max-m_iStream_Nether_Min);
-			return GetRandomishTrack(m_iStream_Nether_Min,m_iStream_Nether_Max);
+			result = GetRandomishTrack(m_iStream_Nether_Min,m_iStream_Nether_Max);
+			break;
 		default: //overworld
-			//return m_iStream_Overworld_Min + random->nextInt(m_iStream_Overworld_Max-m_iStream_Overworld_Min);
-			return GetRandomishTrack(m_iStream_Overworld_Min,m_iStream_Overworld_Max);
+			result = getOverworldMusicID(pMinecraft);
+			break;
 		}
 	}
+
+#ifdef _DEBUG
+	if(result >= 0 && result < eStream_Max)
+		app.DebugPrintf("getMusicID: selected track '%s' (id=%d, domain=%d)\n", m_szStreamFileA[result], result, iDomain);
+#endif
+	return result;
 }
 
 /////////////////////////////////////////////
