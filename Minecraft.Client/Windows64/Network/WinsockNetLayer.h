@@ -8,6 +8,7 @@
 #include <WS2tcpip.h>
 #include <vector>
 #include "..\..\Common\Network\NetworkPlayerInterface.h"
+#include "..\..\..\Minecraft.World\DisconnectPacket.h"
 
 #pragma comment(lib, "Ws2_32.lib")
 
@@ -69,11 +70,23 @@ public:
 	static bool HostGame(int port, const char* bindIp = nullptr);
 	static bool JoinGame(const char* ip, int port);
 
-	// Async join: runs JoinGame on a background thread so the UI stays responsive
-	static bool StartJoinGameAsync(const char* ip, int port);
-	static bool IsJoinComplete();
-	static bool GetJoinResult();
+	// Async join: runs connection on a background thread so the UI stays responsive
+	enum eJoinState
+	{
+		eJoinState_Idle,
+		eJoinState_Connecting,
+		eJoinState_Success,
+		eJoinState_Failed,
+		eJoinState_Rejected,
+		eJoinState_Cancelled
+	};
+	static bool BeginJoinGame(const char* ip, int port);
 	static void CancelJoinGame();
+	static bool FinalizeJoin();
+	static eJoinState GetJoinState();
+	static int GetJoinAttempt();
+	static int GetJoinMaxAttempts();
+	static DisconnectPacket::eDisconnectReason GetJoinRejectReason();
 
 	static bool SendToSmallId(BYTE targetSmallId, const void* data, int dataSize);
 	static bool SendOnSocket(SOCKET sock, const void* data, int dataSize);
@@ -118,7 +131,7 @@ private:
 	static DWORD WINAPI SplitScreenRecvThreadProc(LPVOID param);
 	static DWORD WINAPI AdvertiseThreadProc(LPVOID param);
 	static DWORD WINAPI DiscoveryThreadProc(LPVOID param);
-	static DWORD WINAPI JoinGameThreadProc(LPVOID param);
+	static DWORD WINAPI JoinThreadProc(LPVOID param);
 
 	static SOCKET s_listenSocket;
 	static SOCKET s_hostConnectionSocket;
@@ -162,12 +175,15 @@ private:
 	static CRITICAL_SECTION s_smallIdToSocketLock;
 
 	// Async join state
-	static volatile bool s_joinCancelled;
-	static volatile bool s_joinComplete;
-	static bool s_joinResult;
-	static HANDLE s_joinGameThread;
+	static const int JOIN_MAX_ATTEMPTS = 3;
+	static HANDLE s_joinThread;
+	static volatile eJoinState s_joinState;
+	static volatile int s_joinAttempt;
+	static volatile bool s_joinCancel;
 	static char s_joinIP[256];
 	static int s_joinPort;
+	static BYTE s_joinAssignedSmallId;
+	static DisconnectPacket::eDisconnectReason s_joinRejectReason;
 
 	// Per-pad split-screen TCP connections (client-side, non-host only)
 	static SOCKET s_splitScreenSocket[XUSER_MAX_COUNT];

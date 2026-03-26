@@ -67,12 +67,14 @@ SOCKET WinsockNetLayer::s_splitScreenSocket[XUSER_MAX_COUNT] = { INVALID_SOCKET,
 BYTE WinsockNetLayer::s_splitScreenSmallId[XUSER_MAX_COUNT] = { 0xFF, 0xFF, 0xFF, 0xFF };
 HANDLE WinsockNetLayer::s_splitScreenRecvThread[XUSER_MAX_COUNT] = {nullptr, nullptr, nullptr, nullptr};
 
-volatile bool WinsockNetLayer::s_joinCancelled = false;
-volatile bool WinsockNetLayer::s_joinComplete = false;
-bool WinsockNetLayer::s_joinResult = false;
-HANDLE WinsockNetLayer::s_joinGameThread = nullptr;
+HANDLE WinsockNetLayer::s_joinThread = nullptr;
+volatile WinsockNetLayer::eJoinState WinsockNetLayer::s_joinState = WinsockNetLayer::eJoinState_Idle;
+volatile int WinsockNetLayer::s_joinAttempt = 0;
+volatile bool WinsockNetLayer::s_joinCancel = false;
 char WinsockNetLayer::s_joinIP[256] = {};
 int WinsockNetLayer::s_joinPort = 0;
+BYTE WinsockNetLayer::s_joinAssignedSmallId = 0;
+DisconnectPacket::eDisconnectReason WinsockNetLayer::s_joinRejectReason = DisconnectPacket::eDisconnect_Quitting;
 
 bool g_Win64MultiplayerHost = false;
 bool g_Win64MultiplayerJoin = false;
@@ -120,6 +122,15 @@ void WinsockNetLayer::Shutdown()
 {
 	StopAdvertising();
 	StopDiscovery();
+
+	s_joinCancel = true;
+	if (s_joinThread != nullptr)
+	{
+		WaitForSingleObject(s_joinThread, 5000);
+		CloseHandle(s_joinThread);
+		s_joinThread = nullptr;
+	}
+	s_joinState = eJoinState_Idle;
 
 	s_active = false;
 	s_connected = false;
@@ -349,7 +360,7 @@ bool WinsockNetLayer::JoinGame(const char* ip, int port)
 
 	for (int attempt = 0; attempt < maxAttempts; ++attempt)
 	{
-		if (s_joinCancelled)
+		if (s_joinCancel)
 		{
 			app.DebugPrintf("JoinGame cancelled by user\n");
 			break;
@@ -478,55 +489,234 @@ bool WinsockNetLayer::JoinGame(const char* ip, int port)
 	return true;
 }
 
-DWORD WINAPI WinsockNetLayer::JoinGameThreadProc(LPVOID param)
+bool WinsockNetLayer::BeginJoinGame(const char* ip, int port)
 {
-	s_joinResult = JoinGame(s_joinIP, s_joinPort);
-	s_joinComplete = true;
-	return 0;
-}
+	if (!s_initialized && !Initialize()) return false;
 
-bool WinsockNetLayer::StartJoinGameAsync(const char* ip, int port)
-{
-	// Wait for any previous join thread to finish
-	if (s_joinGameThread != nullptr)
+	// Clean up any prior join attempt
+	CancelJoinGame();
+	if (s_joinThread != nullptr)
 	{
-		WaitForSingleObject(s_joinGameThread, 5000);
-		CloseHandle(s_joinGameThread);
-		s_joinGameThread = nullptr;
+		WaitForSingleObject(s_joinThread, 5000);
+		CloseHandle(s_joinThread);
+		s_joinThread = nullptr;
+	}
+
+	s_isHost = false;
+	s_hostSmallId = 0;
+	s_connected = false;
+	s_active = false;
+
+	if (s_hostConnectionSocket != INVALID_SOCKET)
+	{
+		closesocket(s_hostConnectionSocket);
+		s_hostConnectionSocket = INVALID_SOCKET;
+	}
+
+	if (s_clientRecvThread != nullptr)
+	{
+		WaitForSingleObject(s_clientRecvThread, 5000);
+		CloseHandle(s_clientRecvThread);
+		s_clientRecvThread = nullptr;
 	}
 
 	strncpy_s(s_joinIP, sizeof(s_joinIP), ip, _TRUNCATE);
 	s_joinPort = port;
-	s_joinCancelled = false;
-	s_joinComplete = false;
-	s_joinResult = false;
+	s_joinAttempt = 0;
+	s_joinCancel = false;
+	s_joinAssignedSmallId = 0;
+	s_joinRejectReason = DisconnectPacket::eDisconnect_Quitting;
+	s_joinState = eJoinState_Connecting;
 
-	s_joinGameThread = CreateThread(nullptr, 0, JoinGameThreadProc, nullptr, 0, nullptr);
-	return s_joinGameThread != nullptr;
+	s_joinThread = CreateThread(nullptr, 0, JoinThreadProc, nullptr, 0, nullptr);
+	if (s_joinThread == nullptr)
+	{
+		s_joinState = eJoinState_Failed;
+		return false;
+	}
+	return true;
 }
 
-bool WinsockNetLayer::IsJoinComplete()
+DWORD WINAPI WinsockNetLayer::JoinThreadProc(LPVOID param)
 {
-	return s_joinComplete;
-}
+	struct addrinfo hints = {}, *result = nullptr;
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
 
-bool WinsockNetLayer::GetJoinResult()
-{
-	return s_joinResult;
+	char portStr[16];
+	sprintf_s(portStr, "%d", s_joinPort);
+
+	if (getaddrinfo(s_joinIP, portStr, &hints, &result) != 0)
+	{
+		app.DebugPrintf("getaddrinfo failed for %s:%d\n", s_joinIP, s_joinPort);
+		s_joinState = eJoinState_Failed;
+		return 0;
+	}
+
+	bool connected = false;
+	BYTE assignedSmallId = 0;
+	SOCKET sock = INVALID_SOCKET;
+	const int connectTimeoutSec = 5;
+
+	for (int attempt = 0; attempt < JOIN_MAX_ATTEMPTS; ++attempt)
+	{
+		if (s_joinCancel) { freeaddrinfo(result); s_joinState = eJoinState_Cancelled; return 0; }
+
+		s_joinAttempt = attempt + 1;
+
+		sock = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+		if (sock == INVALID_SOCKET) break;
+
+		int noDelay = 1;
+		setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&noDelay, sizeof(noDelay));
+
+		// Non-blocking connect with select() timeout
+		u_long nonBlocking = 1;
+		ioctlsocket(sock, FIONBIO, &nonBlocking);
+
+		int iResult = connect(sock, result->ai_addr, static_cast<int>(result->ai_addrlen));
+		if (iResult == SOCKET_ERROR)
+		{
+			int err = WSAGetLastError();
+			if (err == WSAEWOULDBLOCK)
+			{
+				fd_set writeSet, errorSet;
+				FD_ZERO(&writeSet); FD_SET(sock, &writeSet);
+				FD_ZERO(&errorSet); FD_SET(sock, &errorSet);
+				struct timeval tv = { connectTimeoutSec, 0 };
+
+				int selectResult = select(0, nullptr, &writeSet, &errorSet, &tv);
+				if (selectResult <= 0 || FD_ISSET(sock, &errorSet))
+				{
+					app.DebugPrintf("connect() to %s:%d timed out (attempt %d/%d)\n", s_joinIP, s_joinPort, attempt + 1, JOIN_MAX_ATTEMPTS);
+					closesocket(sock); sock = INVALID_SOCKET;
+					continue;
+				}
+			}
+			else
+			{
+				app.DebugPrintf("connect() to %s:%d failed (attempt %d/%d): %d\n", s_joinIP, s_joinPort, attempt + 1, JOIN_MAX_ATTEMPTS, err);
+				closesocket(sock); sock = INVALID_SOCKET;
+				for (int w = 0; w < 4 && !s_joinCancel; w++) Sleep(50);
+				continue;
+			}
+		}
+
+		// Restore blocking mode
+		u_long blocking = 0;
+		ioctlsocket(sock, FIONBIO, &blocking);
+
+		// Temporary recv timeout for the handshake only
+		DWORD recvTimeout = connectTimeoutSec * 1000;
+		setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&recvTimeout, sizeof(recvTimeout));
+
+		BYTE assignBuf[1];
+		if (recv(sock, (char*)assignBuf, 1, 0) != 1)
+		{
+			app.DebugPrintf("Failed to receive small ID assignment from host (attempt %d/%d)\n", attempt + 1, JOIN_MAX_ATTEMPTS);
+			closesocket(sock); sock = INVALID_SOCKET;
+			continue;
+		}
+
+		if (assignBuf[0] == WIN64_SMALLID_REJECT)
+		{
+			BYTE rejectBuf[5];
+			if (!RecvExact(sock, rejectBuf, 5))
+			{
+				app.DebugPrintf("Failed to receive reject reason from host\n");
+				closesocket(sock); sock = INVALID_SOCKET;
+				continue;
+			}
+			int reason = ((rejectBuf[1] & 0xff) << 24) | ((rejectBuf[2] & 0xff) << 16) |
+				((rejectBuf[3] & 0xff) << 8) | (rejectBuf[4] & 0xff);
+			s_joinRejectReason = (DisconnectPacket::eDisconnectReason)reason;
+			closesocket(sock);
+			freeaddrinfo(result);
+			s_joinState = eJoinState_Rejected;
+			return 0;
+		}
+
+		assignedSmallId = assignBuf[0];
+		connected = true;
+		break;
+	}
+	freeaddrinfo(result);
+
+	if (s_joinCancel)
+	{
+		if (sock != INVALID_SOCKET) closesocket(sock);
+		s_joinState = eJoinState_Cancelled;
+		return 0;
+	}
+
+	if (!connected)
+	{
+		s_joinState = eJoinState_Failed;
+		return 0;
+	}
+
+	// Clear recv timeout before handing socket to recv thread
+	DWORD noTimeout = 0;
+	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&noTimeout, sizeof(noTimeout));
+
+	s_hostConnectionSocket = sock;
+	s_joinAssignedSmallId = assignedSmallId;
+	s_joinState = eJoinState_Success;
+	return 0;
 }
 
 void WinsockNetLayer::CancelJoinGame()
 {
-	s_joinCancelled = true;
+	s_joinCancel = true;
 
-	// Close the socket to immediately unblock any in-progress connect/select/recv
+	// Close socket to immediately unblock any in-progress connect/select/recv
 	SOCKET sock = s_hostConnectionSocket;
 	if (sock != INVALID_SOCKET)
 	{
 		s_hostConnectionSocket = INVALID_SOCKET;
 		closesocket(sock);
 	}
+
+	if (s_joinState == eJoinState_Success || s_joinState == eJoinState_Connecting)
+	{
+		s_joinState = eJoinState_Cancelled;
+	}
 }
+
+bool WinsockNetLayer::FinalizeJoin()
+{
+	if (s_joinState != eJoinState_Success)
+		return false;
+
+	s_localSmallId = s_joinAssignedSmallId;
+
+	strncpy_s(g_Win64MultiplayerIP, sizeof(g_Win64MultiplayerIP), s_joinIP, _TRUNCATE);
+	g_Win64MultiplayerPort = s_joinPort;
+
+	app.DebugPrintf("Win64 LAN: Connected to %s:%d, assigned smallId=%d\n",
+		s_joinIP, s_joinPort, s_localSmallId);
+
+	s_active = true;
+	s_connected = true;
+
+	s_clientRecvThread = CreateThread(nullptr, 0, ClientRecvThreadProc, nullptr, 0, nullptr);
+
+	if (s_joinThread != nullptr)
+	{
+		WaitForSingleObject(s_joinThread, 2000);
+		CloseHandle(s_joinThread);
+		s_joinThread = nullptr;
+	}
+
+	s_joinState = eJoinState_Idle;
+	return true;
+}
+
+WinsockNetLayer::eJoinState WinsockNetLayer::GetJoinState() { return s_joinState; }
+int WinsockNetLayer::GetJoinAttempt() { return s_joinAttempt; }
+int WinsockNetLayer::GetJoinMaxAttempts() { return JOIN_MAX_ATTEMPTS; }
+DisconnectPacket::eDisconnectReason WinsockNetLayer::GetJoinRejectReason() { return s_joinRejectReason; }
 
 bool WinsockNetLayer::SendOnSocket(SOCKET sock, const void* data, int dataSize)
 {

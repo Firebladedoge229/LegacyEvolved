@@ -29,8 +29,6 @@ UIScene_JoinMenu::UIScene_JoinMenu(int iPad, void *_initData, UILayer *parentLay
 	m_editServerPhase = eEditServer_Idle;
 	m_editServerButtonIndex = -1;
 	m_deleteServerButtonIndex = -1;
-	m_asyncJoinInProgress = false;
-	m_joinLocalUsersMask = 0;
 #endif
 }
 
@@ -64,35 +62,6 @@ void UIScene_JoinMenu::updateTooltips()
 
 void UIScene_JoinMenu::tick()
 {
-#ifdef _WINDOWS64
-	if (m_asyncJoinInProgress && WinsockNetLayer::IsJoinComplete())
-	{
-		m_asyncJoinInProgress = false;
-		if (WinsockNetLayer::GetJoinResult())
-		{
-			int result = g_NetworkManager.FinishJoinGame(m_selectedSession);
-			app.SetLiveLinkRequired(false);
-			if (result != CGameNetworkManager::JOINGAME_SUCCESS)
-			{
-				m_bIgnoreInput = false;
-				m_buttonJoinGame.setLabel(app.GetString(IDS_JOIN_GAME));
-				updateTooltips();
-			}
-		}
-		else
-		{
-			app.SetLiveLinkRequired(false);
-			m_bIgnoreInput = false;
-			m_buttonJoinGame.setLabel(app.GetString(IDS_JOIN_GAME));
-			updateTooltips();
-
-			UINT uiIDA[1];
-			uiIDA[0] = IDS_CONFIRM_OK;
-			ui.RequestErrorMessage(IDS_CONNECTION_FAILED, IDS_CONNECTION_LOST_SERVER, uiIDA, 1, ProfileManager.GetPrimaryPad());
-		}
-	}
-#endif
-
 	if( !m_friendInfoRequestIssued )
 	{
 		ui.NavigateToScene(m_iPad, eUIScene_Timer);
@@ -316,19 +285,6 @@ wstring UIScene_JoinMenu::getMoviePath()
 
 void UIScene_JoinMenu::handleInput(int iPad, int key, bool repeat, bool pressed, bool released, bool &handled)
 {
-#ifdef _WINDOWS64
-	if (m_asyncJoinInProgress && key == ACTION_MENU_CANCEL && pressed)
-	{
-		g_NetworkManager.CancelJoinGame(nullptr);
-		m_asyncJoinInProgress = false;
-		m_bIgnoreInput = false;
-		m_buttonJoinGame.setLabel(app.GetString(IDS_JOIN_GAME));
-		updateTooltips();
-		handled = true;
-		return;
-	}
-#endif
-
 	if(m_bIgnoreInput) return;
 
 	ui.AnimateKeyPress(m_iPad, key, repeat, pressed, released);
@@ -625,22 +581,27 @@ void UIScene_JoinMenu::JoinGame(UIScene_JoinMenu* pClass)
 			ProfileManager.DisplaySystemMessage( SCE_MSG_DIALOG_SYSMSG_TYPE_TRC_PSN_CHAT_RESTRICTION, ProfileManager.GetPrimaryPad() );
 		}
 #endif
-#ifdef _WINDOWS64
-		if (g_NetworkManager.BeginJoinGameAsync(pClass->m_selectedSession, dwLocalUsersMask))
-		{
-			pClass->m_asyncJoinInProgress = true;
-			pClass->m_joinLocalUsersMask = dwLocalUsersMask;
-			pClass->m_buttonJoinGame.setLabel(app.GetString(IDS_PROGRESS_CONNECTING));
-			ui.SetTooltips(DEFAULT_XUI_MENU_USER, -1, IDS_TOOLTIPS_CANCEL_JOIN);
-			return;
-		}
-		CGameNetworkManager::eJoinGameResult result = CGameNetworkManager::JOINGAME_FAIL_GENERAL;
-#else
 		CGameNetworkManager::eJoinGameResult result = g_NetworkManager.JoinGame( pClass->m_selectedSession, dwLocalUsersMask );
-#endif
 
 		// Alert the app the we no longer want to be informed of ethernet connections
 		app.SetLiveLinkRequired( false );
+
+#ifdef _WINDOWS64
+		if (result == CGameNetworkManager::JOINGAME_PENDING)
+		{
+			pClass->m_bIgnoreInput = false;
+			ConnectionProgressParams *param = new ConnectionProgressParams();
+			param->iPad = ProfileManager.GetPrimaryPad();
+			param->stringId = IDS_PROGRESS_CONNECTING;
+			param->showTooltips = true;
+			param->setFailTimer = false;
+			param->timerTime = 0;
+			param->cancelFunc = nullptr;
+			param->cancelFuncParam = nullptr;
+			ui.NavigateToScene(ProfileManager.GetPrimaryPad(), eUIScene_ConnectingProgress, param);
+			return;
+		}
+#endif
 
 		if( result != CGameNetworkManager::JOINGAME_SUCCESS )
 		{
