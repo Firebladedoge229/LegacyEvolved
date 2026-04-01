@@ -14,6 +14,12 @@ This project is based on source code of Minecraft Legacy Console Edition v1.6.05
 
 ## Latest:
 
+### Dedicated Server Entity Tracking Optimization
+
+- Eliminated unnecessary O(players^2 * entities) split-screen system-mate checks in the entity tracker on dedicated servers. The `EntityTracker::tick()`, `TrackedEntity::isVisible()`, and `TrackedEntity::broadcast()` functions all contained loops that called `IsSameSystem()` to support console split-screen couch co-op visibility expansion. On dedicated servers, all players are remote, so `IsSameSystem()` always returns false and these loops did nothing but waste CPU every tick
+- With 2+ players and hundreds of entities, this removes thousands of redundant comparisons per tick, improving TPS scaling under load
+- The original split-screen logic is fully preserved for game client LAN hosting
+
 ### Security Gate Hotfix (Dedicated Server)
 
 - Fixed a critical bug where the security gate (packet buffer) was closed before the LoginPacket was sent during `placeNewPlayer`. Under high-latency connections (e.g. players connecting through tunnels or from distant regions), the LoginPacket and all login setup packets were buffered behind the cipher handshake. When the handshake completed and the gate flushed, game data arrived before the player object was initialized, causing a null pointer crash on the client
