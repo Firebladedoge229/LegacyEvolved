@@ -744,15 +744,24 @@ void ConsoleSaveFileOriginal::Flush(bool autosave, bool updateThumbnail )
 		StorageManager.GetSaveUniqueNumber(&saveOrCheckpointId);
 		TelemetryManager->RecordLevelSaveOrCheckpoint(ProfileManager.GetPrimaryPad(), saveOrCheckpointId, fileSize);
 
+		// Allocate compression buffer while still on the game thread and
+		// holding the lock (StorageManager is not thread-safe).
+		byte *compData = static_cast<byte *>(StorageManager.AllocateSaveData(fileSize + 8));
+		if (compData == nullptr)
+		{
+			app.DebugPrintf("Async save: failed to allocate compression buffer, falling back to sync\n");
+			delete[] snapshot;
+			goto sync_flush;
+		}
+
 		// Release the lock -- main thread and chunk trickle saves can resume
 		ReleaseSaveAccess();
 
-		// Compress and write on a background thread.
-		// Pack metadata into a heap struct so the lambda captures a single
-		// owning pointer instead of stack arrays that go out of scope.
+		// Pack context for the background thread
 		struct AsyncSaveContext
 		{
 			byte *snapshot;
+			byte *compData;
 			unsigned int fileSize;
 			ConsoleSaveFile *self;
 			PBYTE thumbData;
@@ -763,6 +772,7 @@ void ConsoleSaveFileOriginal::Flush(bool autosave, bool updateThumbnail )
 
 		auto *ctx = new AsyncSaveContext();
 		ctx->snapshot = snapshot;
+		ctx->compData = compData;
 		ctx->fileSize = fileSize;
 		ctx->self = this;
 		ctx->thumbData = pbThumbnailData;
@@ -775,44 +785,26 @@ void ConsoleSaveFileOriginal::Flush(bool autosave, bool updateThumbnail )
 		std::thread([ctx]()
 		{
 			unsigned int compLength = ctx->fileSize + 8;
-			byte *compData = static_cast<byte *>(StorageManager.AllocateSaveData(compLength));
-			if (compData == nullptr)
+			Compression::getCompression()->Compress(
+				ctx->compData + 8, &compLength, ctx->snapshot, ctx->fileSize);
+
+			ZeroMemory(ctx->compData, 8);
+			int saveVer = 0;
+			memcpy(ctx->compData, &saveVer, sizeof(int));
+			unsigned int fs = ctx->fileSize;
+			memcpy(ctx->compData + 4, &fs, sizeof(int));
+
+			app.DebugPrintf("Async save: compressed %u -> %u bytes\n", ctx->fileSize, compLength);
+
+			// Queue for the main thread to commit via StorageManager
 			{
-				// Pre-calculate compressed size
-				compLength = 0;
-				Compression::getCompression()->Compress(nullptr, &compLength, ctx->snapshot, ctx->fileSize);
-				compLength += 8;
-				compData = static_cast<byte *>(StorageManager.AllocateSaveData(compLength));
-			}
-
-			if (compData != nullptr)
-			{
-				Compression::getCompression()->Compress(compData + 8, &compLength, ctx->snapshot, ctx->fileSize);
-
-				ZeroMemory(compData, 8);
-				int saveVer = 0;
-				memcpy(compData, &saveVer, sizeof(int));
-				unsigned int fs = ctx->fileSize;
-				memcpy(compData + 4, &fs, sizeof(int));
-
-				app.DebugPrintf("Async save: compressed %u -> %u bytes\n", ctx->fileSize, compLength);
-
-				// Queue for the main thread to commit via StorageManager
-				// (StorageManager requires main-thread calls + Tick() to flush)
-				{
-					std::lock_guard<std::mutex> lock(s_pendingSaveMutex);
-					s_pendingSave.self = ctx->self;
-					s_pendingSave.thumbData = ctx->thumbData;
-					s_pendingSave.thumbSize = ctx->thumbSize;
-					memcpy(s_pendingSave.textMetadata, ctx->textMetadata, 88);
-					s_pendingSave.textMetadataBytes = ctx->textMetadataBytes;
-					s_pendingSave.ready = true;
-				}
-			}
-			else
-			{
-				app.DebugPrintf("Async save: failed to allocate compression buffer\n");
-				s_asyncSaveInFlight.store(false, std::memory_order_release);
+				std::lock_guard<std::mutex> lock(s_pendingSaveMutex);
+				s_pendingSave.self = ctx->self;
+				s_pendingSave.thumbData = ctx->thumbData;
+				s_pendingSave.thumbSize = ctx->thumbSize;
+				memcpy(s_pendingSave.textMetadata, ctx->textMetadata, 88);
+				s_pendingSave.textMetadataBytes = ctx->textMetadataBytes;
+				s_pendingSave.ready = true;
 			}
 
 			delete[] ctx->snapshot;

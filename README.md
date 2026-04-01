@@ -17,8 +17,9 @@ This project is based on source code of Minecraft Legacy Console Edition v1.6.05
 ### Async Autosave (Dedicated Server)
 
 - Autosave no longer freezes the server. Previously, every autosave compressed the entire world save file with zlib synchronously on the main thread, blocking all game ticks for 2-6 seconds depending on world size
-- The save buffer is now snapshotted (memcpy) while holding the lock (~18ms), then compression runs on a background thread. The compressed data is committed back to StorageManager on the next main-thread tick
-- Additionally, autosave on the dedicated server now only flushes entity data instead of re-saving all dirty chunks, matching the Xbox/Orbis behavior. Chunks are already saved continuously by the per-tick trickle save process
+- The save buffer is now snapshotted (memcpy) while holding the save lock (~18ms), then compression runs on a detached background thread. Once compression finishes, the compressed data is committed back to StorageManager on the next game tick. If a previous async save is still in flight, it falls back to the original synchronous path to prevent unbounded queuing
+- Autosave on the dedicated server now only flushes entity data instead of re-saving all dirty chunks, matching the Xbox/Orbis behavior. Chunks are already saved continuously by the per-tick trickle save process
+- The async save commit runs from both the game thread tick and the ServerMain tick loop (via `TickCoreSystems`), ensuring saves complete during bootstrap, normal gameplay, and shutdown
 - Autosave timing breakdown is now logged to `server.log` for diagnostics (e.g. `autosave breakdown: players=0ms levels=0ms rules=0ms flush=18ms total=18ms`)
 
 ### Dedicated Server Entity Tracking Optimization
