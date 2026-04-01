@@ -14,6 +14,12 @@ This project is based on source code of Minecraft Legacy Console Edition v1.6.05
 
 ## Latest:
 
+### Graphics Settings Menu Fixes
+
+- Fixed keyboard/gamepad navigation skipping VSync, Fullscreen, and Render Distance options. The SWF focus chain only linked the original console controls; added C++ post-init rewiring of `m_objNavDown`/`m_objNavUp` via Iggy so all controls are reachable
+- Shifted the graphics menu layout up by 60 pixels for better vertical centering
+- Fixed skin preview walking and attack animations running too fast with VSync off. The per-frame animation increments now scale by delta time relative to a 60fps baseline
+
 ### Async Autosave (Dedicated Server)
 
 - Autosave no longer freezes the server. Previously, every autosave compressed the entire world save file with zlib synchronously on the main thread, blocking all game ticks for 2-6 seconds depending on world size

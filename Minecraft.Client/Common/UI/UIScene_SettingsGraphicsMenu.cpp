@@ -74,7 +74,7 @@ UIScene_SettingsGraphicsMenu::UIScene_SettingsGraphicsMenu(int iPad, void *initD
 	WCHAR TempString[256];
 
 	swprintf(TempString, 256, L"Render Distance: %d",app.GetGameSettings(m_iPad,eGameSetting_RenderDistance));	
-	m_sliderRenderDistance.init(TempString,eControl_RenderDistance,0,5,DistanceToLevel(app.GetGameSettings(m_iPad,eGameSetting_RenderDistance)));
+	m_sliderRenderDistance.init(TempString,eControl_RenderDistance,0,3,DistanceToLevel(app.GetGameSettings(m_iPad,eGameSetting_RenderDistance)));
 	
 	swprintf( TempString, 256, L"%ls: %d%%", app.GetString( IDS_SLIDER_GAMMA ),app.GetGameSettings(m_iPad,eGameSetting_Gamma));	
 	m_sliderGamma.init(TempString,eControl_Gamma,0,100,app.GetGameSettings(m_iPad,eGameSetting_Gamma));
@@ -93,6 +93,24 @@ UIScene_SettingsGraphicsMenu::UIScene_SettingsGraphicsMenu(int iPad, void *initD
 	// VSync and Exclusive Fullscreen are only available on PC
 	removeControl(&m_checkboxVSync, true);
 	removeControl(&m_checkboxExclusiveFullscreen, true);
+#else
+	// The SWF's original focus chain skips VSync, Fullscreen, and RenderDistance
+	// (CustomSkinAnim -> Gamma). Rewire the navigation so all controls are reachable:
+	// CustomSkinAnim -> VSync -> Fullscreen -> RenderDistance -> Gamma
+	{
+		IggyName navDown = registerFastName(L"m_objNavDown");
+		IggyName navUp   = registerFastName(L"m_objNavUp");
+
+		IggyValueSetStringUTF8RS(m_checkboxCustomSkinAnim.getIggyValuePath(), navDown, nullptr, "VSync", -1);
+
+		IggyValueSetStringUTF8RS(m_checkboxVSync.getIggyValuePath(), navUp, nullptr, "CustomSkinAnim", -1);
+		IggyValueSetStringUTF8RS(m_checkboxVSync.getIggyValuePath(), navDown, nullptr, "ExclusiveFullscreen", -1);
+
+		IggyValueSetStringUTF8RS(m_checkboxExclusiveFullscreen.getIggyValuePath(), navUp, nullptr, "VSync", -1);
+		IggyValueSetStringUTF8RS(m_checkboxExclusiveFullscreen.getIggyValuePath(), navDown, nullptr, "RenderDistance", -1);
+
+		IggyValueSetStringUTF8RS(m_sliderRenderDistance.getIggyValuePath(), navUp, nullptr, "ExclusiveFullscreen", -1);
+	}
 #endif
 
 	const bool bInGame=(Minecraft::GetInstance()->level!=nullptr);
