@@ -19,7 +19,7 @@
 #include "../../../Minecraft.World/DisconnectPacket.h"
 #include "../../Minecraft.h"
 #include <windns.h>
-#pragma comment(lib, "Dnsapi.lib")
+#pragma comment(lib, "dnsapi.lib")
 #include "../4JLibs/inc/4J_Profile.h"
 
 #include <string>
