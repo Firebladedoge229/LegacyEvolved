@@ -86,8 +86,6 @@
 	"**/Minecraft.Client/Windows64/GameHDD": true,
 	"**/Minecraft.Client/Windows64/Iggy/lib": true,
 	"**/Minecraft.Client/Windows64Media": true,
-	"**/Minecraft.Client/Windows64Media/4J_strings.h": false,
-	"**/Minecraft.Client/Windows64Media/strings.h": false,
 	"**/Minecraft.Client/x64": true,
 	"**/Minecraft.Client/Xbox/4JLibs/libs": true,
 	"**/Minecraft.Client/Xbox/4JLibs/Media": true,
