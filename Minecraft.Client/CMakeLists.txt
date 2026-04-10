@@ -46,16 +46,10 @@ if(PLATFORM_NAME STREQUAL "Windows64")
   )
 
   add_custom_target(GenerateStringsHeader_Minecraft.Client DEPENDS "${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}")
-  add_dependencies(Minecraft.Client GenerateStringsHeader_Minecraft.Client)
   set_property(TARGET GenerateStringsHeader_Minecraft.Client PROPERTY FOLDER "Build")
+  add_dependencies(Minecraft.Client GenerateStringsHeader_Minecraft.Client)
+  add_dependencies(Minecraft.Client GenerateStringIdLookup)
 endif()
-
-add_custom_target(GenerateStringIdLookup_Minecraft.Client DEPENDS "${MINECRAFT_CLIENT_STRING_ID_LOOKUP}")
-add_dependencies(Minecraft.Client GenerateStringIdLookup_Minecraft.Client)
-if(TARGET GenerateStringsHeader_Minecraft.Client)
-  add_dependencies(GenerateStringIdLookup_Minecraft.Client GenerateStringsHeader_Minecraft.Client)
-endif()
-set_property(TARGET GenerateStringIdLookup_Minecraft.Client PROPERTY FOLDER "Build")
 
 # Only define executable on windows
 if(PLATFORM_NAME STREQUAL "Windows64")
