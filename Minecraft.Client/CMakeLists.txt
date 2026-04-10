@@ -50,25 +50,6 @@ if(PLATFORM_NAME STREQUAL "Windows64")
   set_property(TARGET GenerateStringsHeader_Minecraft.Client PROPERTY FOLDER "Build")
 endif()
 
-set(MINECRAFT_CLIENT_STRING_ID_LOOKUP "${CMAKE_BINARY_DIR}/generated/StringIdLookup.generated.inc")
-set(MINECRAFT_CLIENT_STRING_ID_HEADERS
-  "${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}"
-)
-string(REPLACE ";" "\\;" MINECRAFT_CLIENT_STRING_ID_HEADERS_ARG "${MINECRAFT_CLIENT_STRING_ID_HEADERS}")
-
-add_custom_command(
-  OUTPUT "${MINECRAFT_CLIENT_STRING_ID_LOOKUP}"
-  COMMAND ${CMAKE_COMMAND}
-    "-DHEADER_LIST=${MINECRAFT_CLIENT_STRING_ID_HEADERS_ARG}"
-    "-DOUTPUT_FILE=${MINECRAFT_CLIENT_STRING_ID_LOOKUP}"
-    -P "${CMAKE_SOURCE_DIR}/cmake/GenerateStringIdLookup.cmake"
-  DEPENDS
-    ${MINECRAFT_CLIENT_STRING_ID_HEADERS}
-    "${CMAKE_SOURCE_DIR}/cmake/GenerateStringIdLookup.cmake"
-  COMMENT "Generating string ID lookup include"
-  VERBATIM
-)
-
 add_custom_target(GenerateStringIdLookup_Minecraft.Client DEPENDS "${MINECRAFT_CLIENT_STRING_ID_LOOKUP}")
 add_dependencies(Minecraft.Client GenerateStringIdLookup_Minecraft.Client)
 if(TARGET GenerateStringsHeader_Minecraft.Client)
