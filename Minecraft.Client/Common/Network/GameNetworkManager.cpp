@@ -574,11 +574,10 @@ bool	CGameNetworkManager::StartNetworkGame(Minecraft *minecraft, LPVOID lpParame
 		}
 		else if ( connection->isClosed() || !IsInSession())
 		{
-//		assert(false);
-		// Set to NULL because we're returning to home
-		// The level is not reset when you leave the progress UI which causes a crash
-		Minecraft::GetInstance()->setLevel(NULL);
-
+//		    assert(false);
+		    // Set to NULL because we're returning to home
+		    // The level is not reset when you leave the progress UI which causes a crash
+		    Minecraft::GetInstance()->setLevel(NULL);
 			MinecraftServer::HaltServer();
 			return false;
 		}
