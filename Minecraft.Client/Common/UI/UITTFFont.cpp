@@ -4,8 +4,8 @@
 #include "../../../Minecraft.World/File.h"
 #include "UITTFFont.h"
 
-UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharacter) 
-	: m_strFontName(name),
+UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharacter, bool registerAsDefaultFonts)
+	: m_strFontName(name)
 	  pbData(nullptr),
 	  m_loaded(false) // check if loaded
 {
@@ -47,10 +47,12 @@ UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharact
 
 		IggyFontInstallTruetypeFallbackCodepointUTF8( m_strFontName.c_str(), -1, IGGY_FONTFLAG_none, fallbackCharacter );
 
-		// 4J Stu - These are so we can use the default flash controls
-		IggyFontInstallTruetypeUTF8 ( (void *)pbData, IGGY_TTC_INDEX_none, "Times New Roman", -1, IGGY_FONTFLAG_none );
-		IggyFontInstallTruetypeUTF8 ( (void *)pbData, IGGY_TTC_INDEX_none, "Arial", -1, IGGY_FONTFLAG_none );
-
+		if (registerAsDefaultFonts)
+		{
+			// 4J Stu - These are so we can use the default flash controls
+			IggyFontInstallTruetypeUTF8 ( (void *)pbData, IGGY_TTC_INDEX_none, "Times New Roman", -1, IGGY_FONTFLAG_none );
+			IggyFontInstallTruetypeUTF8 ( (void *)pbData, IGGY_TTC_INDEX_none, "Arial", -1, IGGY_FONTFLAG_none );
+		}
 		m_loaded = true;
 	}
 	else
