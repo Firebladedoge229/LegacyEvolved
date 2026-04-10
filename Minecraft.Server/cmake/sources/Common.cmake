@@ -446,6 +446,7 @@ set(_MINECRAFT_SERVER_COMMON_ROOT
   "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/StitchedTexture.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/Stitcher.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/StringTable.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/Xbox/XML/ATGXmlParser.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/SuspendedParticle.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/SuspendedTownParticle.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/../Minecraft.Client/TakeAnimationParticle.cpp"

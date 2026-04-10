@@ -87,6 +87,10 @@ if(PLATFORM_NAME STREQUAL "Windows64") # Server is only supported on Windows for
   add_subdirectory(Minecraft.Server)
 endif()
 
+if(TARGET GenerateStringsHeader_Minecraft.Client)
+  add_dependencies(Minecraft.World GenerateStringsHeader_Minecraft.Client)
+endif()
+
 # ---
 # Build versioning
 # ---
