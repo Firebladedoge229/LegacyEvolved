@@ -36,11 +36,9 @@ if(PLATFORM_NAME STREQUAL "Windows64")
     OUTPUT "${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}"
     COMMAND ${CMAKE_COMMAND}
       "-DXML_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/Windows64Media/loc"
-      "-DBASE_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/Windows64Media/strings.h"
       "-DOUTPUT_FILE=${MINECRAFT_CLIENT_COMPILETIME_STRINGS_HEADER}"
       -P "${CMAKE_SOURCE_DIR}/cmake/GenerateStringsHeaderFromXml.cmake"
     DEPENDS
-      "${CMAKE_CURRENT_SOURCE_DIR}/Windows64Media/strings.h"
       ${MINECRAFT_CLIENT_WINDOWS_LOCALIZATION_XML}
       "${CMAKE_SOURCE_DIR}/cmake/GenerateStringsHeaderFromXml.cmake"
     COMMENT "Generating compile-time string IDs from XML"
