@@ -2020,7 +2020,6 @@ void PlayerConnection::handleCustomPayload(shared_ptr<CustomPayloadPacket> custo
 	}
 #endif
 
-#if 0
 	if (CustomPayloadPacket::CUSTOM_BOOK_PACKET.compare(customPayloadPacket->identifier) == 0)
 	{
 		ByteArrayInputStream bais(customPayloadPacket->data);
@@ -2060,9 +2059,7 @@ void PlayerConnection::handleCustomPayload(shared_ptr<CustomPayloadPacket> custo
 			player->inventory->setItem(player->inventory->selected, sentItem);
 		}
 	}
-	else
-#endif 
-	if (CustomPayloadPacket::TRADER_SELECTION_PACKET.compare(customPayloadPacket->identifier) == 0)
+	else if (CustomPayloadPacket::TRADER_SELECTION_PACKET.compare(customPayloadPacket->identifier) == 0)
 	{
 		ByteArrayInputStream bais(customPayloadPacket->data);
 		DataInputStream input(&bais);
