@@ -93,8 +93,44 @@ if(TARGET GenerateStringsHeader_Minecraft.Client)
 endif()
 
 # ---
+# String ID lookup generation
+# ---
+
+set(STRING_ID_LOOKUP_OUTPUT
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/StringIdLookup.generated.inc"
+)
+
+set(STRING_ID_XML_ROOT
+  "${CMAKE_SOURCE_DIR}/Minecraft.Client/Windows64Media/loc"
+)
+
+file(GLOB_RECURSE STRING_ID_XML_FILES CONFIGURE_DEPENDS
+  "${STRING_ID_XML_ROOT}/*.xml"
+)
+
+add_custom_command(
+  OUTPUT "${STRING_ID_LOOKUP_OUTPUT}"
+  COMMAND ${CMAKE_COMMAND}
+    "-DHEADER_LIST=${STRING_ID_XML_FILES}"
+    "-DOUTPUT_FILE=${STRING_ID_LOOKUP_OUTPUT}"
+    -P "${CMAKE_SOURCE_DIR}/cmake/GenerateStringIdLookup.cmake"
+  DEPENDS
+    ${STRING_ID_XML_FILES}
+    "${CMAKE_SOURCE_DIR}/cmake/GenerateStringIdLookup.cmake"
+  COMMENT "Generating StringIdLookup.generated.inc"
+  VERBATIM
+)
+
+add_custom_target(GenerateStringIdLookup ALL
+  DEPENDS "${STRING_ID_LOOKUP_OUTPUT}"
+)
+
+set_property(TARGET GenerateStringIdLookup PROPERTY FOLDER "Build")
+
+# ---
 # Build versioning
 # ---
+
 set(BUILDVER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateBuildVer.cmake")
 set(BUILDVER_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/Common/BuildVer.h")
 
@@ -112,10 +148,25 @@ if(PLATFORM_NAME STREQUAL "Windows64")
   add_dependencies(Minecraft.Server GenerateBuildVer)
 endif()
 
+add_dependencies(Minecraft.Client GenerateStringIdLookup)
+
+if(TARGET Minecraft.Server)
+  add_dependencies(Minecraft.Server GenerateStringIdLookup)
+endif()
+
+target_include_directories(Minecraft.Client PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+
+target_include_directories(Minecraft.Server PRIVATE
+  "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+
 # ---
 # Project organisation
 # ---
 # Set the startup project for Visual Studio
+
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT Minecraft.Client)
 
 # Setup folders for Visual Studio, just hides the build targets under a sub folder
