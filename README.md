@@ -23,6 +23,13 @@ This project is based on Legacy Console Edition v1.6.0560.0 (TU19) with fixes an
 
 ## Latest:
 
+### Beacon Menu Fixes
+
+- Fixed the beacon consuming a payment item (emerald, diamond, iron ingot, or gold ingot) when pressing the submit checkmark without changing any powers
+- Fixed beacon menu options appearing greyed out or disappearing entirely after re-entering the menu or on servers, caused by beacon data packets arriving before the client had the menu ready
+- Added continuous sync of beacon levels and powers to clients, so changes to the beacon pyramid are reflected while the menu is open
+- Fixed beacon effect buttons not visually updating on menu re-entry due to uninitialized UI state from reused heap memory
+
 ### Linux Cross-Compilation Support
 
 - The project can now be built from Linux, cross-compiling to Windows
