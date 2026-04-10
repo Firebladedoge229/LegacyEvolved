@@ -16,6 +16,7 @@
 #include "../Security/SecurityConfig.h"
 #include "../Security/RateLimiter.h"
 #include "../Security/IdentityTokenManager.h"
+#include "../FourKitBridge.h"
 #include "Tesselator.h"
 #include "Windows64/4JLibs/inc/4J_Render.h"
 #include "Windows64/GameConfig/Minecraft.spa.h"
@@ -370,6 +371,19 @@ int main(int argc, char **argv)
 	config.showHelp = false;
 
 	SetConsoleCtrlHandler(ConsoleCtrlHandlerProc, TRUE);
+
+	// Disable QuickEdit mode so clicking in the console window doesn't freeze
+	// the server process. Without this, any accidental click pauses all threads
+	// that write to stdout until a key is pressed.
+	{
+		HANDLE hInput = GetStdHandle(STD_INPUT_HANDLE);
+		DWORD mode = 0;
+		GetConsoleMode(hInput, &mode);
+		mode &= ~ENABLE_QUICK_EDIT_MODE;
+		mode |= ENABLE_EXTENDED_FLAGS;
+		SetConsoleMode(hInput, mode);
+	}
+
 	SetExeWorkingDirectory();
 
 	// Load base settings from server.properties, then override with CLI values when provided
@@ -681,6 +695,8 @@ int main(int argc, char **argv)
 
 	LogStartupStep("server startup complete");
 	LogInfof("startup", "Dedicated server listening on %s:%d", g_Win64MultiplayerIP, g_Win64MultiplayerPort);
+
+	FourKitBridge::Initialize();
 	if (worldBootstrap.status == eWorldBootstrap_CreatedNew && !IsShutdownRequested() && !app.m_bShutdown)
 	{
 		// Windows64 suppresses saveToDisc right after new world creation
@@ -737,6 +753,7 @@ int main(int argc, char **argv)
 			{
 				LogWorldIO("requesting autosave");
 				app.SetXuiServerAction(kServerActionPad, eXuiServerAction_AutoSaveGame);
+				FourKitBridge::FireWorldSave();
 				autosaveRequested = true;
 			}
 			nextAutosaveTick = now + autosaveIntervalMs;
@@ -746,6 +763,8 @@ int main(int argc, char **argv)
 	}
 	serverCli.Stop();
 	app.m_bShutdown = true;
+
+	FourKitBridge::Shutdown(); //close out the translation layer early for plugin shutdown
 
 	LogInfof("shutdown", "Dedicated server stopped");
 	MinecraftServer *server = MinecraftServer::getInstance();

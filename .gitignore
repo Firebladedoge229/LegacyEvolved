@@ -428,3 +428,11 @@ tools/*.class
 tools/*.swf
 tools/staging/
 tools/server-monitor/
+
+
+# Nix
+result
+result-*
+.direnv/
+.xwin-cache/
+.xwin/
