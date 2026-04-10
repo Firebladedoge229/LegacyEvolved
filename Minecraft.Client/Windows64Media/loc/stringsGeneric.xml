@@ -6874,6 +6874,10 @@ Would you like to install the mash-up pack or texture pack now?</value>
 		<value>Death Messages</value>
 	</data>	
 
+	<data name="IDS_HARDCORE_DEATH_MESSAGE">
+		<value>dead.</value>
+	</data>
+
 	<data name="IDS_CHECKBOX_ANIMATED_CHARACTER">
 		<value>Animated Character</value>
 	</data>	
