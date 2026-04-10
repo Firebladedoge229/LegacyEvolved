@@ -5,7 +5,7 @@
 #include "UITTFFont.h"
 
 UITTFFont::UITTFFont(const string &name, const string &path, S32 fallbackCharacter, bool registerAsDefaultFonts)
-	: m_strFontName(name)
+	: m_strFontName(name),
 	  pbData(nullptr),
 	  m_loaded(false) // check if loaded
 {
