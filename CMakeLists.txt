@@ -108,14 +108,19 @@ file(GLOB_RECURSE STRING_ID_XML_FILES CONFIGURE_DEPENDS
   "${STRING_ID_XML_ROOT}/*.xml"
 )
 
+set(GENERATED_STRINGS_HEADER
+  "${CMAKE_BINARY_DIR}/generated/Windows64Media/strings.h"
+)
+
 add_custom_command(
   OUTPUT "${STRING_ID_LOOKUP_OUTPUT}"
   COMMAND ${CMAKE_COMMAND}
-    "-DHEADER_LIST=${STRING_ID_XML_FILES}"
+    "-DHEADER_LIST=${GENERATED_STRINGS_HEADER}"
     "-DOUTPUT_FILE=${STRING_ID_LOOKUP_OUTPUT}"
     -P "${CMAKE_SOURCE_DIR}/cmake/GenerateStringIdLookup.cmake"
   DEPENDS
     ${STRING_ID_XML_FILES}
+    "${GENERATED_STRINGS_HEADER}"
     "${CMAKE_SOURCE_DIR}/cmake/GenerateStringIdLookup.cmake"
   COMMENT "Generating StringIdLookup.generated.inc"
   VERBATIM
@@ -124,6 +129,10 @@ add_custom_command(
 add_custom_target(GenerateStringIdLookup ALL
   DEPENDS "${STRING_ID_LOOKUP_OUTPUT}"
 )
+
+if(TARGET GenerateStringsHeader_Minecraft.Client)
+  add_dependencies(GenerateStringIdLookup GenerateStringsHeader_Minecraft.Client)
+endif()
 
 set_property(TARGET GenerateStringIdLookup PROPERTY FOLDER "Build")
 
